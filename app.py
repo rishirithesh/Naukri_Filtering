@@ -80,7 +80,7 @@ def upload_file():
         clean_data = clean_nan_values(data)
 
         # FULL DROPDOWN VALUES
-        filter_columns = ["Industry", "Role", "Department"]
+        filter_columns = ["Industry", "Role", "Department","Under Graduation degree","Post graduation degree"]
 
         filter_options = {}
 

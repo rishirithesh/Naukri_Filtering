@@ -1,3 +1,6 @@
+# Improved `index.html`
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -227,20 +230,7 @@
 
     let filterValues = {};
 
-    const DISPLAY_COLUMNS = [
-        "Name",
-        "Department",
-        "Role",
-        "Industry",
-        "Key Skills",
-        "Resume Headline",
-        "Summary",
-        "Under Graduation degree",
-        "UG Specialization",
-        "UG University/institute Name",
-        "Post graduation degree",
-        "Gender"
-    ];
+    let DISPLAY_COLUMNS = [];
 
     function showToast(msg) {
 
@@ -292,6 +282,7 @@
 
             sessionId = result.session_id;
             allColumns = result.columns;
+            DISPLAY_COLUMNS = [...allColumns];
             allDataPreview = result.preview || [];
             filterValues = result.filter_options || {};
 
@@ -624,8 +615,40 @@
 </html>
 ```
 
-# Backend
+# Required Backend Change (`app.py`)
 
-Your existing `app.py` from the previous message already works perfectly with this improved UI.
+Update the filter columns section inside `/upload`.
 
-No backend changes are required.
+Replace this:
+
+```python
+filter_columns = ["Industry", "Role", "Department"]
+```
+
+With this:
+
+```python
+filter_columns = [
+    "Industry",
+    "Role",
+    "Department",
+    "Under Graduation degree",
+    "Post graduation degree"
+]
+```
+
+This will:
+
+* Add dropdown checkbox filters for UG degree
+* Add dropdown checkbox filters for PG degree
+* Automatically populate all filter values
+* Keep filtering fast and accurate
+
+# Result
+
+Now:
+
+* ALL uploaded columns will automatically appear in the table
+* Industry / Role / Department / UG Degree / PG Degree all get dropdown checkbox filters
+* No need to manually edit frontend columns again for future datasets
+* Any newly uploaded dataset columns automatically render in the UI
