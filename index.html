@@ -1,6 +1,3 @@
-# Improved `index.html`
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,7 +24,7 @@
         td {
             white-space: pre-wrap;
             word-break: break-word;
-            max-width: 320px;
+            max-width: 450px;
             vertical-align: top;
         }
 
@@ -200,7 +197,7 @@
 
                 <div class="overflow-auto table-container scrollbar">
 
-                    <table class="w-full min-w-[1200px]">
+                    <table class="w-max min-w-full">
 
                         <thead class="sticky top-0 bg-zinc-900 z-10 border-b border-zinc-700">
                         <tr id="table-header"></tr>
@@ -231,6 +228,14 @@
     let filterValues = {};
 
     let DISPLAY_COLUMNS = [];
+
+    const FILTER_COLUMNS = [
+        "Industry",
+        "Role",
+        "Department",
+        "Under Graduation degree",
+        "Post graduation degree"
+    ];
 
     function showToast(msg) {
 
@@ -281,9 +286,13 @@
             }
 
             sessionId = result.session_id;
+
             allColumns = result.columns;
-            DISPLAY_COLUMNS = [...allColumns];
+
+            DISPLAY_COLUMNS = result.columns;
+
             allDataPreview = result.preview || [];
+
             filterValues = result.filter_options || {};
 
             document.getElementById('total-count').textContent =
@@ -293,12 +302,15 @@
                 result.total_rows.toLocaleString();
 
             renderFilters();
+
             renderTableHeader();
+
             renderTable(allDataPreview);
 
             showToast(`Loaded ${result.total_rows} candidates`);
 
         } catch (err) {
+
             showToast(err.message || 'Upload failed');
         }
     }
@@ -309,7 +321,7 @@
 
         container.innerHTML = '';
 
-        DISPLAY_COLUMNS.forEach(col => {
+        FILTER_COLUMNS.forEach(col => {
 
             if (!allColumns.includes(col)) return;
 
@@ -446,6 +458,7 @@
     function clearAllFilters() {
 
         currentFilters = {};
+
         textSearches = {};
 
         document.querySelectorAll('input')
@@ -471,14 +484,17 @@
 
         DISPLAY_COLUMNS.forEach(col => {
 
-            if (!allColumns.includes(col)) return;
-
             const th = document.createElement('th');
 
             th.className = `
-                px-6 py-4 text-left text-xs uppercase
-                tracking-wider font-semibold text-zinc-400
-                whitespace-nowrap bg-zinc-900
+                px-6 py-4
+                text-left text-xs uppercase
+                tracking-wider font-semibold
+                text-zinc-400
+                whitespace-nowrap
+                bg-zinc-900
+                border-b border-zinc-800
+                sticky top-0 z-20
             `;
 
             th.textContent = col;
@@ -493,26 +509,44 @@
 
         tbody.innerHTML = '';
 
-        data.forEach((row, index) => {
+        data.forEach((row) => {
 
             const tr = document.createElement('tr');
 
             tr.className = `
-                hover:bg-zinc-800/70 transition-all duration-150
+                hover:bg-zinc-800/70
+                transition-all duration-150
+                border-b border-zinc-800
             `;
 
             let html = '';
 
             DISPLAY_COLUMNS.forEach(col => {
 
-                if (!allColumns.includes(col)) return;
+                let val =
+                    row[col] !== null &&
+                    row[col] !== undefined
+                        ? row[col]
+                        : '';
 
-                let val = row[col] !== null && row[col] !== undefined
-                    ? row[col]
-                    : '';
+                if (Array.isArray(val)) {
+                    val = val.join(', ');
+                }
+
+                if (typeof val === 'object' && val !== null) {
+                    val = JSON.stringify(val);
+                }
 
                 html += `
-                    <td class="px-6 py-4 text-sm text-zinc-300 leading-relaxed">
+                    <td class="
+                        px-6 py-4
+                        text-sm text-zinc-300
+                        leading-relaxed
+                        min-w-[220px]
+                        max-w-[450px]
+                        break-words
+                        align-top
+                    ">
                         ${val}
                     </td>
                 `;
@@ -559,6 +593,7 @@
             renderTable(result.data || []);
 
         } catch (err) {
+
             showToast('Filter failed');
         }
     }
@@ -597,6 +632,7 @@
                 const a = document.createElement('a');
 
                 a.href = url;
+
                 a.download = 'Filtered_Candidates.xlsx';
 
                 a.click();
@@ -605,6 +641,7 @@
             }
 
         } catch (err) {
+
             showToast('Export failed');
         }
     }
@@ -613,42 +650,3 @@
 
 </body>
 </html>
-```
-
-# Required Backend Change (`app.py`)
-
-Update the filter columns section inside `/upload`.
-
-Replace this:
-
-```python
-filter_columns = ["Industry", "Role", "Department"]
-```
-
-With this:
-
-```python
-filter_columns = [
-    "Industry",
-    "Role",
-    "Department",
-    "Under Graduation degree",
-    "Post graduation degree"
-]
-```
-
-This will:
-
-* Add dropdown checkbox filters for UG degree
-* Add dropdown checkbox filters for PG degree
-* Automatically populate all filter values
-* Keep filtering fast and accurate
-
-# Result
-
-Now:
-
-* ALL uploaded columns will automatically appear in the table
-* Industry / Role / Department / UG Degree / PG Degree all get dropdown checkbox filters
-* No need to manually edit frontend columns again for future datasets
-* Any newly uploaded dataset columns automatically render in the UI
