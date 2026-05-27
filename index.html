@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naukri Filter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .table-container { max-height: calc(100vh - 280px); }
+        td { white-space: pre-wrap; word-break: break-word; max-width: 320px; vertical-align: top; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-80 border-r border-zinc-800 bg-zinc-900 flex flex-col">
+            <div class="p-6 border-b border-zinc-800">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-yellow-400 rounded-2xl flex items-center justify-center text-zinc-950 font-bold text-3xl">📍</div>
+                    <span class="font-semibold text-3xl tracking-tighter">Naukri Filter</span>
+                </div>
+            </div>
+
+            <div class="p-6">
+                <div id="upload-zone" class="border-2 border-dashed border-zinc-700 hover:border-yellow-400 rounded-3xl p-10 text-center cursor-pointer transition-all">
+                    <i class="fa-solid fa-cloud-arrow-up text-5xl mb-4 text-zinc-400"></i>
+                    <p class="font-medium">Drop CSV or XLSX here</p>
+                    <input type="file" id="file-input" accept=".csv,.xlsx" class="hidden" onchange="handleUpload(event)">
+                    <button onclick="document.getElementById('file-input').click()" 
+                            class="mt-4 px-6 py-2.5 bg-white text-zinc-900 rounded-2xl font-medium">Browse Files</button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto px-6" id="filters-panel">
+                <h3 class="font-semibold mb-4">Column Filters</h3>
+                <div id="dynamic-filters" class="space-y-6"></div>
+            </div>
+
+            <div class="p-6 border-t border-zinc-800">
+                <div class="bg-zinc-800 rounded-3xl p-5">
+                    <div class="flex justify-between text-sm mb-2">
+                        <span class="text-zinc-400">Total</span>
+                        <span id="total-count" class="font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-zinc-400">Filtered</span>
+                        <span id="filtered-count" class="font-bold text-yellow-400">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col">
+            <div class="flex-1 p-8 flex flex-col">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-semibold">Filtered Candidates</h1>
+                    <button onclick="exportData()" 
+                            class="bg-yellow-400 hover:bg-yellow-300 text-zinc-950 px-6 py-3 rounded-3xl font-semibold flex items-center gap-2">
+                        <i class="fa-solid fa-download"></i> Export XLSX
+                    </button>
+                </div>
+
+                <div class="bg-zinc-900 border border-zinc-800 rounded-3xl flex-1 flex flex-col overflow-hidden">
+                    <div class="overflow-auto table-container" id="table-scroll">
+                        <table class="w-full" id="results-table">
+                            <thead class="sticky top-0 bg-zinc-900 border-b border-zinc-700">
+                                <tr id="table-header"></tr>
+                            </thead>
+                            <tbody id="table-body" class="divide-y divide-zinc-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let allColumns = [];
+        let currentFilters = {};
+        let textSearches = {};
+        let allDataPreview = [];   // ← Fixed: Global declaration
+
+        const DISPLAY_COLUMNS = [
+            "Name", "Department", "Role", "Industry", "Key Skills", "Resume Headline",
+            "Summary", "Under Graduation degree", "UG Specialization", 
+            "UG University/institute Name", "Post graduation degree", "Gender"
+        ];
+
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed bottom-6 right-6 bg-zinc-800 border border-yellow-400 text-yellow-400 px-6 py-3 rounded-3xl shadow-2xl";
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2800);
+        }
+
+        async function handleUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('http://localhost:5000/upload', { method: 'POST', body: formData });
+                const result = await res.json();
+
+                if (result.error) throw new Error(result.error);
+
+                sessionId = result.session_id;
+                allColumns = result.columns;
+                allDataPreview = result.preview || [];
+
+                document.getElementById('total-count').textContent = result.total_rows.toLocaleString();
+                document.getElementById('filtered-count').textContent = result.total_rows.toLocaleString();
+
+                renderFilters();
+                renderTableHeader();
+                renderTable(allDataPreview);
+
+                showToast(`✅ Loaded ${result.total_rows} candidates`);
+            } catch (err) {
+                showToast("❌ " + (err.message || "Failed to process file"));
+            }
+        }
+
+        function renderFilters() {
+            const container = document.getElementById('dynamic-filters');
+            container.innerHTML = '';
+
+            DISPLAY_COLUMNS.forEach(col => {
+                if (!allColumns.includes(col)) return;
+
+                const div = document.createElement('div');
+                div.className = "bg-zinc-800 rounded-2xl p-4";
+                div.innerHTML = `
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-2">${col}</label>
+                    <input type="text" placeholder="Search in ${col}..." 
+                           class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm mb-3 focus:border-yellow-400 outline-none"
+                           data-col="${col}">
+                    <select multiple class="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3 min-h-[100px] text-sm" data-col="${col}"></select>
+                `;
+                container.appendChild(div);
+
+                const textInput = div.querySelector('input');
+                const select = div.querySelector('select');
+
+                // Populate dropdown
+                const uniqueValues = [...new Set(allDataPreview.map(row => row[col]).filter(v => v && String(v).trim() !== ''))].slice(0, 30);
+                uniqueValues.forEach(val => {
+                    const opt = new Option(String(val).length > 50 ? String(val).substring(0,47)+'...' : val, val);
+                    select.add(opt);
+                });
+
+                textInput.addEventListener('input', () => {
+                    textSearches[col] = textInput.value;
+                    applyFilters();
+                });
+
+                select.addEventListener('change', () => {
+                    currentFilters[col] = Array.from(select.selectedOptions).map(o => o.value);
+                    applyFilters();
+                });
+            });
+        }
+
+        function renderTableHeader() {
+            const header = document.getElementById('table-header');
+            header.innerHTML = '';
+            DISPLAY_COLUMNS.forEach(col => {
+                if (!allColumns.includes(col)) return;
+                const th = document.createElement('th');
+                th.className = "px-6 py-4 text-left text-xs font-medium text-zinc-400 whitespace-nowrap";
+                th.textContent = col;
+                header.appendChild(th);
+            });
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            data.forEach((row) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-zinc-800 transition-colors border-b border-zinc-800";
+                let html = '';
+
+                DISPLAY_COLUMNS.forEach(col => {
+                    if (!allColumns.includes(col)) return;
+                    let val = row[col] !== null && row[col] !== undefined ? row[col] : '';
+                    html += `<td class="px-6 py-4 text-sm">${val}</td>`;
+                });
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function applyFilters() {
+            if (!sessionId) return;
+
+            try {
+                const res = await fetch('http://localhost:5000/filter', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        filters: currentFilters,
+                        text_searches: textSearches
+                    })
+                });
+                const result = await res.json();
+
+                if (result.error) throw new Error(result.error);
+
+                document.getElementById('filtered-count').textContent = result.total.toLocaleString();
+                renderTable(result.data || []);
+            } catch (err) {
+                showToast("Filter error");
+            }
+        }
+
+        async function exportData() {
+            if (!sessionId) return showToast("No data to export");
+
+            try {
+                const res = await fetch('http://localhost:5000/export', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        filters: currentFilters,
+                        text_searches: textSearches
+                    })
+                });
+
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "Filtered_Candidates.xlsx";
+                    a.click();
+                    showToast("✅ Export successful!");
+                }
+            } catch (err) {
+                showToast("Export failed");
+            }
+        }
+    </script>
+</body>
+</html>
